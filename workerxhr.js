@@ -1,5 +1,5 @@
 (function (workerxhr) {
-  
+
   'use strict';
 
   function Emitter() {
@@ -7,7 +7,7 @@
       return new Emitter();
     }
     this.callbacks = {};
-  };
+  }
 
   Emitter.prototype.on = function (event, fn) {
     (this.callbacks[event] = this.callbacks[event] || []).push(fn);
@@ -38,7 +38,27 @@
     }
     return this;
   };
-  
+
+  function xhrWorker() {
+    var blob = new Blob([
+      'self.onmessage = function (e) {\
+        var url, type, data, xhr;\
+        url = e.data.url;\
+        type = e.data.type;\
+        data = e.data.data;\
+        xhr = new XMLHttpRequest();\
+        xhr.onreadystatechange = function (e) {\
+          if (xhr.readyState === xhr.DONE && xhr.status === 200) {\
+            self.postMessage(xhr.responseText);\
+          };\
+        };\
+        xhr.open(type, url);\
+        xhr.send(data);\
+      };']);
+
+    return new Worker(window.URL.createObjectURL(blob));
+  }
+
   function WorkerXhr(opts) {
     Emitter.call(this);
 
@@ -53,31 +73,34 @@
   WorkerXhr.prototype.constructor = WorkerXhr;
 
   WorkerXhr.prototype.load = function (opts) {
-    var worker, cached, that = this;
+    var worker, key, cached, that = this;
     opts = opts || {};
 
     opts.type = opts.type || 'GET';
     opts.data = opts.data || null;
-    opts.workerPath = opts.workerPath || './';
+
+    // other settings
 
     if (!!opts.url) {
+      key = opts.url.match(/\w+\.\w+$/).join().replace(/\./, '-');
 
-      cached = localStorage.getItem(opts.url);
+      cached = localStorage.getItem(key);
 
-      if (!!cached) {
+      if (!!cached && !opts.force) {
         this.emit('data', JSON.parse(cached));
       } else {
-        worker = new Worker(opts.workerPath + 'workerxhr_worker.js');
+        // worker = new Worker(opts.workerPath + 'workerxhr_worker.js');
+        worker = xhrWorker();
         worker.onmessage = function (e) {
           if (!!e.data) {
-            localStorage.setItem(opts.url, e.data);
+            localStorage.setItem(key, e.data);
             that.emit('data', JSON.parse(e.data));
           }
         };
         worker.onerror = function (e) {
           that.emit('error', e);
         };
-        worker.postMessage(opts);            
+        worker.postMessage(opts);
       }
     }
   };
@@ -85,13 +108,14 @@
   workerxhr = workerxhr || new WorkerXhr();
 
 
-  if (typeof exports === "object") {
+  if (typeof exports === 'object') {
     module.exports = workerxhr;
-  } else if (typeof define === "function" && define.amd) {
-    define(function() { return workerxhr; });
+  } else if (typeof define === 'function' && define.amd) {
+    define(function () { return workerxhr; });
   } else {
     window['workerxhr'] = workerxhr;
   }
-  
+
 }(window.workerxhr));
+
 
