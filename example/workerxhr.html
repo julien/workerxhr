@@ -45,12 +45,18 @@
       }
 
       workerxhr.on('data', function (data) {
-        users = data;
+        users = data.concat(data)
+          .concat(data)
+          .concat(data)
+          .concat(data)
+          .concat(data)
+          .concat(data);
+        console.log('printing ', users.length, ' users');
         index = -1;
         printUsers();
       });
 
-      workerxhr.load({url: 'workerxhr_data.json'});
+      workerxhr.load({url: 'http://localhost:8000/example/workerxhr_data.json'});
     };
   </script>
 </body>
