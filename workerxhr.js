@@ -39,62 +39,70 @@
     return this;
   };
 
-  function xhrWorker() {
-    var blob = new Blob([
-      'self.onmessage = function (e) {\
-        var url, type, data, xhr;\
-        url = e.data.url;\
-        type = e.data.type;\
-        data = e.data.data;\
-        xhr = new XMLHttpRequest();\
-        xhr.onreadystatechange = function (e) {\
-          if (xhr.readyState === xhr.DONE && xhr.status === 200) {\
-            self.postMessage(xhr.responseText);\
-          };\
-        };\
-        xhr.open(type, url);\
-        xhr.send(data);\
-      };']);
+  function xhrWorker(src) {
+    var blob, worker;
 
-    return new Worker(window.URL.createObjectURL(blob));
-  }
+    if (!!(/\.js$/).exec(src)) {
+      worker = new Worker(src);
+    } else {
+      blob = new Blob([
+        'self.onmessage = function (e) {\
+          var url, type, data, xhr;\
+          url = e.data.url;\
+          type = e.data.type;\
+          data = e.data.data;\
+          xhr = new XMLHttpRequest();\
+          xhr.onreadystatechange = function (e) {\
+            if (xhr.readyState === xhr.DONE) {\
+              self.postMessage({status: xhr.status, responseText: xhr.responseText});\
+            }\
+          };\
+          xhr.open(type, url);\
+          xhr.send(data);\
+        };']);
+      worker = new Worker(window.URL.createObjectURL(blob));
+    } 
+    return worker;
+    }
 
   function WorkerXhr(opts) {
     Emitter.call(this);
 
-    opts = opts || {};
     if (!(this instanceof WorkerXhr)) {
       return new WorkerXhr(opts);
     }
 
-    this.load(opts);
+    if (!!opts) {
+      this.load(opts);
+    }
   }
   WorkerXhr.prototype = new Emitter();
   WorkerXhr.prototype.constructor = WorkerXhr;
 
   WorkerXhr.prototype.load = function (opts) {
-    var worker, key, cached, that = this;
+    var worker, key, cached, obj, that = this;
     opts = opts || {};
 
     opts.type = opts.type || 'GET';
     opts.data = opts.data || null;
 
-    // other settings
-
+    // !!required options is the url
     if (!!opts.url) {
       key = opts.url.match(/\w+\.\w+$/).join().replace(/\./, '-');
 
       cached = localStorage.getItem(key);
 
       if (!!cached && !opts.force) {
-        this.emit('data', JSON.parse(cached));
+        obj = JSON.parse(cached);
+        this.emit('data', obj);
       } else {
-        // worker = new Worker(opts.workerPath + 'workerxhr_worker.js');
         worker = xhrWorker();
         worker.onmessage = function (e) {
+          var obj;
           if (!!e.data) {
-            localStorage.setItem(key, e.data);
-            that.emit('data', JSON.parse(e.data));
+            obj = e.data.responseText;
+            localStorage.setItem(key, obj);
+            that.emit('data', JSON.parse(obj));
           }
         };
         worker.onerror = function (e) {
